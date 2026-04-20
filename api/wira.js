@@ -110,37 +110,55 @@ async function editSurat(auth, obj) {
 
 async function hapusSurat(auth, rowIndex) {
   const row = parseInt(rowIndex);
+  
+  // Proteksi: jangan hapus baris 1 (header)
+  if (!row || row <= 1) {
+    return { ok:false, msg:'Row tidak valid.' };
+  }
+
   const s = getSheets(auth);
-
-  // Cek total baris
-  const data = await s.spreadsheets.values.get({
-    spreadsheetId: process.env.SPREADSHEET_ID, range: 'Sheet1'
+  const meta = await s.spreadsheets.get({
+    spreadsheetId: process.env.SPREADSHEET_ID
   });
-  const totalRows = (data.data.values || []).length;
+  const sheetId   = meta.data.sheets[0].properties.sheetId;
+  const gridProps = meta.data.sheets[0].properties.gridProperties;
+  const totalRows = gridProps.rowCount;
 
-  // Jika hanya 1 baris data tersisa, kosongkan saja
-  if (totalRows <= 2) {
+  // Proteksi: jangan hapus jika hanya 1 baris tersisa di sheet
+  if (totalRows <= 1) {
+    return { ok:false, msg:'Sheet sudah kosong.' };
+  }
+
+  // Jika ini baris terakhir yang berisi data, kosongkan saja
+  const dataRange = await s.spreadsheets.values.get({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: 'Sheet1'
+  });
+  const dataRows = (dataRange.data.values || []).length;
+
+  if (dataRows <= 2) {
+    // Hanya ada 1 baris data (baris 2), kosongkan saja
     await s.spreadsheets.values.clear({
       spreadsheetId: process.env.SPREADSHEET_ID,
-      range: `Sheet1!A${row}:H${row}`
+      range: `Sheet1!A${row}:Z${row}`
     });
     return { ok:true, msg:'Data berhasil dihapus!' };
   }
 
-  // Hapus baris
-  const meta = await s.spreadsheets.get({
-    spreadsheetId: process.env.SPREADSHEET_ID
-  });
-  const sheetId = meta.data.sheets[0].properties.sheetId;
+  // Normal delete
   await s.spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
     requestBody: { requests: [{ deleteDimension: {
-      range: { sheetId, dimension:'ROWS', startIndex:row-1, endIndex:row }
+      range: {
+        sheetId,
+        dimension: 'ROWS',
+        startIndex: row - 1,
+        endIndex: row
+      }
     }}]}
   });
   return { ok:true, msg:'Data berhasil dihapus!' };
 }
-
 async function updateStatus(auth, rowIndex, status) {
   await getSheets(auth).spreadsheets.values.update({
     spreadsheetId: process.env.SPREADSHEET_ID,
