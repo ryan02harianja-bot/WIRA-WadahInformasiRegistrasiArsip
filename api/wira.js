@@ -18,7 +18,7 @@ function getAuth() {
   const auth = new google.auth.JWT(
     process.env.GOOGLE_SA_EMAIL,
     null,
-    process.env.GOOGLE_SA_KEY.replace(/\\n/g, '\n'),
+    process.env.GOOGLE_SA_KEY.split('\\n').join('\n'),
     [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive'
