@@ -116,50 +116,85 @@ async function ambilDataDashboard(auth) {
 // ============================================================
 async function uploadSurat(auth, obj) {
   if (!obj.noSurat || !obj.asalSurat || !obj.perihal) {
-    return { ok: false, msg: 'Data tidak lengkap (nomor, asal, perihal wajib diisi).' };
+    return { ok: false, msg: 'Data tidak lengkap.' };
   }
   if (!obj.fileSurat) {
     return { ok: false, msg: 'File PDF tidak ditemukan.' };
   }
 
-  const drive  = getDriveClient(auth);
   const sheets = getSheetsClient(auth);
 
-  // Upload ke Drive
-  const buffer   = Buffer.from(obj.fileSurat, 'base64');
-  const { Readable } = require('stream');
-  const stream   = Readable.from(buffer);
+  // Upload langsung via multipart ke Drive folder milik user
+  // menggunakan fetch dengan token dari service account
+  const tokenResponse = await auth.getAccessToken();
+  const accessToken = tokenResponse.token;
 
-  const driveResp = await drive.files.create({
-    requestBody: {
-      name:    obj.fileName,
-      parents: [process.env.FOLDER_ID]
-    },
-    media: {
-      mimeType: obj.mimeType,
-      body:     stream
-    },
-    fields: 'id, webViewLink',
-    supportsAllDrives: true
+  const buffer = Buffer.from(obj.fileSurat, 'base64');
+
+  const metadata = JSON.stringify({
+    name: obj.fileName,
+    parents: [process.env.FOLDER_ID]
   });
 
-  const fileId  = driveResp.data.id;
-  const fileUrl = driveResp.data.webViewLink;
+  // Buat multipart body manual
+  const boundary = 'wira_boundary_' + Date.now();
+  const delimiter = '\r\n--' + boundary + '\r\n';
+  const closeDelimiter = '\r\n--' + boundary + '--';
+
+  const metaPart = delimiter +
+    'Content-Type: application/json\r\n\r\n' +
+    metadata;
+
+  const filePart = delimiter +
+    'Content-Type: ' + obj.mimeType + '\r\n\r\n';
+
+  const metaBuffer  = Buffer.from(metaPart, 'utf8');
+  const fileHeader  = Buffer.from(filePart, 'utf8');
+  const closeBuffer = Buffer.from(closeDelimiter, 'utf8');
+
+  const body = Buffer.concat([metaBuffer, fileHeader, buffer, closeBuffer]);
+
+  const uploadRes = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'multipart/related; boundary=' + boundary,
+        'Content-Length': body.length
+      },
+      body: body
+    }
+  );
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    throw new Error('Upload Drive gagal: ' + errText);
+  }
+
+  const fileData = await uploadRes.json();
+  const fileId   = fileData.id;
+  const fileUrl  = fileData.webViewLink;
 
   // Set permission publik
- await drive.permissions.create({
-    fileId,
-    requestBody: { role: 'reader', type: 'anyone' },
-    supportsAllDrives: true
-  });
+  await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    }
+  );
 
   const tglSuratVal  = obj.tglSurat  ? new Date(obj.tglSurat).toISOString()  : '';
   const tglTerimaVal = obj.tglTerima ? new Date(obj.tglTerima).toISOString() : '';
 
-  // Simpan ke Spreadsheet
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.SPREADSHEET_ID,
-    range:         'Sheet1',
+    range: 'Sheet1',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[
@@ -177,7 +212,6 @@ async function uploadSurat(auth, obj) {
 
   return { ok: true, msg: 'Berhasil Mengarsipkan!' };
 }
-
 // ============================================================
 // EDIT SURAT
 // ============================================================
