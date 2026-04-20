@@ -139,16 +139,18 @@ async function uploadSurat(auth, obj) {
       mimeType: obj.mimeType,
       body:     stream
     },
-    fields: 'id, webViewLink'
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
   });
 
   const fileId  = driveResp.data.id;
   const fileUrl = driveResp.data.webViewLink;
 
   // Set permission publik
-  await drive.permissions.create({
+ await drive.permissions.create({
     fileId,
-    requestBody: { role: 'reader', type: 'anyone' }
+    requestBody: { role: 'reader', type: 'anyone' },
+    supportsAllDrives: true
   });
 
   const tglSuratVal  = obj.tglSurat  ? new Date(obj.tglSurat).toISOString()  : '';
