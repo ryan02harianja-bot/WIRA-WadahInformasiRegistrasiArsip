@@ -15,8 +15,8 @@ function getAuth() {
   });
 }
 
-const sheets = (auth) => google.sheets({ version: 'v4', auth });
-const drive  = (auth) => google.drive({ version: 'v3', auth });
+function getSheets(auth) { return google.sheets({ version: 'v4', auth }); }
+function getDrive(auth)  { return google.drive({ version: 'v3', auth }); }
 
 function fmt(val) {
   if (!val) return '';
@@ -101,17 +101,37 @@ async function editSurat(auth, obj) {
 
 async function hapusSurat(auth, rowIndex) {
   const row = parseInt(rowIndex);
-  const meta = await sheets(auth).spreadsheets.get({ 
-    spreadsheetId: process.env.SPREADSHEET_ID 
+  const s = getSheets(auth);
+  
+  // Cek total baris dulu
+  const data = await s.spreadsheets.values.get({
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: 'Sheet1'
+  });
+  const totalRows = (data.data.values || []).length;
+
+  // Jika hanya 1 baris data tersisa (baris ke-2, index 1),
+  // kosongkan saja daripada hapus
+  if (totalRows <= 2) {
+    await s.spreadsheets.values.clear({
+      spreadsheetId: process.env.SPREADSHEET_ID,
+      range: `Sheet1!A${row}:H${row}`
+    });
+    return { ok: true, msg: 'Data berhasil dihapus!' };
+  }
+
+  // Hapus baris seperti biasa
+  const meta = await s.spreadsheets.get({
+    spreadsheetId: process.env.SPREADSHEET_ID
   });
   const sheetId = meta.data.sheets[0].properties.sheetId;
-  await sheets(auth).spreadsheets.batchUpdate({
+  await s.spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
     requestBody: { requests: [{ deleteDimension: {
-      range: { sheetId, dimension:'ROWS', startIndex:row-1, endIndex:row }
+      range: { sheetId, dimension: 'ROWS', startIndex: row-1, endIndex: row }
     }}]}
   });
-  return { ok:true, msg:'Data berhasil dihapus!' };
+  return { ok: true, msg: 'Data berhasil dihapus!' };
 }
 
 async function updateStatus(auth, rowIndex, status) {
