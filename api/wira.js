@@ -15,16 +15,29 @@ const { google } = require('googleapis');
 // ============================================================
 
 function getAuth() {
-  const auth = new google.auth.JWT(
-    process.env.GOOGLE_SA_EMAIL,
-    null,
-    process.env.GOOGLE_SA_KEY.split('\\n').join('\n'),
-    [
+  let privateKey = process.env.GOOGLE_SA_KEY || '';
+  
+  // Handle semua kemungkinan format
+  privateKey = privateKey
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '')
+    .trim();
+
+  // Kalau key tidak punya newline setelah header, tambahkan
+  if (!privateKey.includes('\n')) {
+    privateKey = privateKey
+      .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+      .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----\n');
+  }
+
+  return new google.auth.JWT({
+    email:  process.env.GOOGLE_SA_EMAIL,
+    key:    privateKey,
+    scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive'
     ]
-  );
-  return auth;
+  });
 }
 
 function getSheetsClient(auth) {
