@@ -109,8 +109,15 @@ async function editSurat(auth, obj) {
 }
 
 async function hapusSurat(auth, rowIndex) {
+  console.log('hapusSurat dipanggil, rowIndex:', rowIndex, 'type:', typeof rowIndex);
+  
   const row = parseInt(rowIndex);
-  if (!row || row < 1) return { ok:false, msg:'Row tidak valid.' };
+  console.log('row setelah parseInt:', row);
+  
+  if (isNaN(row) || row < 1) {
+    console.log('Row tidak valid, rowIndex asli:', rowIndex);
+    return { ok:false, msg:'Row tidak valid: ' + rowIndex };
+  }
 
   const s = getSheets(auth);
   const meta = await s.spreadsheets.get({
@@ -119,7 +126,8 @@ async function hapusSurat(auth, rowIndex) {
   const sheetId   = meta.data.sheets[0].properties.sheetId;
   const totalRows = meta.data.sheets[0].properties.gridProperties.rowCount;
 
-  // Jika ini baris terakhir, kosongkan saja
+  console.log('totalRows:', totalRows, 'row:', row);
+
   if (totalRows <= 1 || row >= totalRows) {
     await s.spreadsheets.values.clear({
       spreadsheetId: process.env.SPREADSHEET_ID,
