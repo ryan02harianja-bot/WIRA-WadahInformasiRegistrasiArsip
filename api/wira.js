@@ -101,14 +101,9 @@ async function editSurat(auth, obj) {
 
 async function hapusSurat(auth, rowIndex) {
   const row = parseInt(rowIndex);
-  try {
-    const r = await sheets(auth).spreadsheets.values.get({
-      spreadsheetId: process.env.SPREADSHEET_ID, range: `Sheet1!G${row}`
-    });
-    const link = r.data.values?.[0]?.[0];
-    if (link) { const id = fid(link); if (id) await drive(auth).files.delete({fileId:id}).catch(()=>{}); }
-  } catch(e) {}
-  const meta = await sheets(auth).spreadsheets.get({ spreadsheetId: process.env.SPREADSHEET_ID });
+  const meta = await sheets(auth).spreadsheets.get({ 
+    spreadsheetId: process.env.SPREADSHEET_ID 
+  });
   const sheetId = meta.data.sheets[0].properties.sheetId;
   await sheets(auth).spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
