@@ -41,6 +41,8 @@
     });
   </script>
 
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
@@ -893,6 +895,90 @@ function resetFormModal() {
   bersihkanError();
 }
 
+  // ============================================================
+// GOOGLE DRIVE UPLOAD LANGSUNG DARI BROWSER
+// ============================================================
+let gAccessToken = null;
+
+function mintaTokenLaluUpload(file, onSuccess) {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: '__GOOGLE_CLIENT_ID__', // akan diisi otomatis
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: (tokenResponse) => {
+      if (tokenResponse.error) {
+        showToast('Gagal login Google: ' + tokenResponse.error, 'error');
+        return;
+      }
+      gAccessToken = tokenResponse.access_token;
+      uploadKeDrive(file, gAccessToken, onSuccess);
+    }
+  });
+  client.requestAccessToken();
+}
+
+function uploadKeDrive(file, accessToken, onSuccess) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64 = e.target.result.split(',')[1];
+    const buffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+    const metadata = JSON.stringify({
+      name: file.name,
+      parents: ['__FOLDER_ID__'] // akan diisi otomatis
+    });
+
+    const boundary = 'wira_boundary';
+    const delimiter = '\r\n--' + boundary + '\r\n';
+    const closeDelimiter = '\r\n--' + boundary + '--';
+
+    const metaPart = delimiter + 'Content-Type: application/json\r\n\r\n' + metadata;
+    const filePart = delimiter + 'Content-Type: application/pdf\r\n\r\n';
+    const closePart = closeDelimiter;
+
+    const metaBytes  = new TextEncoder().encode(metaPart);
+    const fileBytes  = new TextEncoder().encode(filePart);
+    const closeBytes = new TextEncoder().encode(closePart);
+
+    const body = new Uint8Array(metaBytes.length + fileBytes.length + buffer.length + closeBytes.length);
+    let offset = 0;
+    body.set(metaBytes,  offset); offset += metaBytes.length;
+    body.set(fileBytes,  offset); offset += fileBytes.length;
+    body.set(buffer,     offset); offset += buffer.length;
+    body.set(closeBytes, offset);
+
+    fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'multipart/related; boundary=' + boundary
+      },
+      body: body
+    })
+    .then(r => r.json())
+    .then(async data => {
+      if (!data.id) throw new Error('Upload gagal: ' + JSON.stringify(data));
+      
+      // Set permission publik
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ role: 'reader', type: 'anyone' })
+      });
+
+      onSuccess(data.webViewLink);
+    })
+    .catch(err => {
+      showToast('Gagal upload ke Drive: ' + err.message, 'error');
+      const btn = document.getElementById('btnSimpan');
+      btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
+    });
+  };
+  reader.readAsDataURL(file);
+}
+  
 // ============================================================
 // SIMPAN / EDIT
 // ============================================================
@@ -917,13 +1003,8 @@ function simpan() {
     apiPost(obj)
       .then(res => {
         btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
-        if (res.ok) {
-          showToast(res.msg, 'success');
-          tutupModal();
-          muatDashboard();
-        } else {
-          showToast(res.msg, 'error');
-        }
+        if (res.ok) { showToast(res.msg, 'success'); tutupModal(); muatDashboard(); }
+        else showToast(res.msg, 'error');
       })
       .catch(err => {
         btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
@@ -932,6 +1013,7 @@ function simpan() {
     return;
   }
 
+  // Mode tambah baru — upload PDF dulu ke Drive
   const file = document.getElementById('fileSurat').files[0];
   const progress = document.getElementById('uploadProgress');
   const bar      = document.getElementById('progressBar');
@@ -947,45 +1029,35 @@ function simpan() {
     pText.innerText = 'Mengunggah file... ' + Math.round(prog) + '%';
   }, 300);
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
+  mintaTokenLaluUpload(file, function(fileUrl) {
+    clearInterval(timer);
+    bar.style.width = '90%';
+    pText.innerText = 'Menyimpan data...';
+
     const obj = {
-      action:    'uploadSurat',
+      action:    'simpanSurat',
       tglSurat:  document.getElementById('tglSurat').value,
       tglTerima: document.getElementById('tglTerima').value,
       noSurat:   document.getElementById('noSurat').value.trim(),
       asalSurat: document.getElementById('asalSurat').value.trim(),
       perihal:   document.getElementById('perihal').value.trim(),
-      fileSurat: e.target.result.split(',')[1],
-      mimeType:  file.type,
-      fileName:  file.name
+      fileUrl:   fileUrl
     };
+
     apiPost(obj)
       .then(res => {
         clearInterval(timer);
         bar.style.width = '100%';
         pText.innerText = 'Selesai!';
         btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
-        if (res.ok) {
-          showToast(res.msg, 'success');
-          tutupModal();
-          muatDashboard();
-        } else {
-          showToast(res.msg, 'error');
-        }
+        if (res.ok) { showToast(res.msg, 'success'); tutupModal(); muatDashboard(); }
+        else showToast(res.msg, 'error');
       })
       .catch(err => {
-        clearInterval(timer);
         btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
         showToast('Error: ' + err.message, 'error');
       });
-  };
-  reader.onerror = () => {
-    clearInterval(timer);
-    btn.innerText = 'SIMPAN DATA'; btn.disabled = false;
-    showToast('Gagal membaca file.', 'error');
-  };
-  reader.readAsDataURL(file);
+  });
 }
 
 // ============================================================
