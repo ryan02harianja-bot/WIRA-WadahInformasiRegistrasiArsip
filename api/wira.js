@@ -45,7 +45,7 @@ async function ambilDataDashboard(auth) {
   const bLalu = prev.getMonth(), yLalu = prev.getFullYear();
   let cIni = 0, cLalu = 0;
   const semua = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!r || !r[1]) continue;
     const d = r[2] ? new Date(r[2]) : null;
@@ -54,7 +54,7 @@ async function ambilDataDashboard(auth) {
       if (d.getMonth()===bLalu && d.getFullYear()===yLalu) cLalu++;
     }
     semua.push({
-      rowIndex: i+1, no: r[1]||'',
+  rowIndex: i+1, no: r[1]||'',
       tglSurat: fmt(r[2]), tglTerima: fmt(r[3]),
       asal: r[4]||'', perihal: r[5]||'',
       link: r[6]||'', status: r[7]||'Belum Diproses'
@@ -110,34 +110,17 @@ async function editSurat(auth, obj) {
 
 async function hapusSurat(auth, rowIndex) {
   const row = parseInt(rowIndex);
-  
-  // Proteksi: jangan hapus baris 1 (header)
-  if (!row || row <= 1) {
-    return { ok:false, msg:'Row tidak valid.' };
-  }
+  if (!row || row < 1) return { ok:false, msg:'Row tidak valid.' };
 
   const s = getSheets(auth);
   const meta = await s.spreadsheets.get({
     spreadsheetId: process.env.SPREADSHEET_ID
   });
   const sheetId   = meta.data.sheets[0].properties.sheetId;
-  const gridProps = meta.data.sheets[0].properties.gridProperties;
-  const totalRows = gridProps.rowCount;
+  const totalRows = meta.data.sheets[0].properties.gridProperties.rowCount;
 
-  // Proteksi: jangan hapus jika hanya 1 baris tersisa di sheet
-  if (totalRows <= 1) {
-    return { ok:false, msg:'Sheet sudah kosong.' };
-  }
-
-  // Jika ini baris terakhir yang berisi data, kosongkan saja
-  const dataRange = await s.spreadsheets.values.get({
-    spreadsheetId: process.env.SPREADSHEET_ID,
-    range: 'Sheet1'
-  });
-  const dataRows = (dataRange.data.values || []).length;
-
-  if (dataRows <= 2) {
-    // Hanya ada 1 baris data (baris 2), kosongkan saja
+  // Jika ini baris terakhir, kosongkan saja
+  if (totalRows <= 1 || row >= totalRows) {
     await s.spreadsheets.values.clear({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: `Sheet1!A${row}:Z${row}`
@@ -145,7 +128,6 @@ async function hapusSurat(auth, rowIndex) {
     return { ok:true, msg:'Data berhasil dihapus!' };
   }
 
-  // Normal delete
   await s.spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
     requestBody: { requests: [{ deleteDimension: {
