@@ -34,7 +34,9 @@ async function getRows(auth) {
   const r = await getSheets(auth).spreadsheets.values.get({
     spreadsheetId: process.env.SPREADSHEET_ID, range: 'Sheet1'
   });
-  return r.data.values || [];
+  const vals = r.data.values || [];
+  console.log('Total rows:', vals.length, 'Baris 0:', JSON.stringify(vals[0]));
+  return vals;
 }
 
 async function ambilDataDashboard(auth) {
@@ -47,7 +49,7 @@ async function ambilDataDashboard(auth) {
   const semua = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    if (!r || !r[1]) continue;
+    if (!r) continue;
     const d = r[2] ? new Date(r[2]) : null;
     if (d && !isNaN(d)) {
       if (d.getMonth()===bIni  && d.getFullYear()===yIni)  cIni++;
