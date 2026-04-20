@@ -394,11 +394,25 @@ module.exports = async function handler(req, res) {
       const body   = req.body;
       const action = body.action;
 
-      if (action === 'uploadSurat')  return res.status(200).json(await uploadSurat(auth, body));
-      if (action === 'editSurat')    return res.status(200).json(await editSurat(auth, body));
-      if (action === 'hapusSurat')   return res.status(200).json(await hapusSurat(auth, body.rowIndex));
-      if (action === 'updateStatus') return res.status(200).json(await updateStatus(auth, body.rowIndex, body.status));
-      if (action === 'eksporData')   return res.status(200).json(await eksporData(auth));
+     if (action === 'uploadSurat' || action === 'simpanSurat') {
+  // simpanSurat: fileUrl sudah ada, tinggal simpan ke sheet
+  if (body.fileUrl) {
+    const sheets = getSheetsClient(auth);
+    const tglSuratVal  = body.tglSurat  ? new Date(body.tglSurat).toISOString()  : '';
+    const tglTerimaVal = body.tglTerima ? new Date(body.tglTerima).toISOString() : '';
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.SPREADSHEET_ID,
+      range: 'Sheet1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[
+        new Date().toISOString(), body.noSurat, tglSuratVal,
+        tglTerimaVal, body.asalSurat, body.perihal, body.fileUrl, 'Belum Diproses'
+      ]]}
+    });
+    return res.status(200).json({ ok: true, msg: 'Berhasil Mengarsipkan!' });
+  }
+  return res.status(200).json(await uploadSurat(auth, body));
+};
 
       return res.status(400).json({ error: 'Action tidak dikenal.' });
     }
