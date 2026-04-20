@@ -902,7 +902,7 @@ let gAccessToken = null;
 
 function mintaTokenLaluUpload(file, onSuccess) {
   const client = google.accounts.oauth2.initTokenClient({
-    client_id: '__GOOGLE_CLIENT_ID__', // akan diisi otomatis
+    client_id: '458958561820-cuc29vp3qu2ic7b4jmgv452ve2u8d5p2.apps.googleusercontent.com', // akan diisi otomatis
     scope: 'https://www.googleapis.com/auth/drive.file',
     callback: (tokenResponse) => {
       if (tokenResponse.error) {
@@ -924,7 +924,7 @@ function uploadKeDrive(file, accessToken, onSuccess) {
 
     const metadata = JSON.stringify({
       name: file.name,
-      parents: ['__FOLDER_ID__'] // akan diisi otomatis
+      parents: ['1nQbbIy8eohi5HEUu9KkJxLvKpE5vPneP'] // akan diisi otomatis
     });
 
     const boundary = 'wira_boundary';
