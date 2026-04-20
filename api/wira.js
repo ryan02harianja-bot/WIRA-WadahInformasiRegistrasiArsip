@@ -31,7 +31,7 @@ function fid(url) {
 }
 
 async function getRows(auth) {
-  const r = await sheets(auth).spreadsheets.values.get({
+  const r = await getSheets(auth).spreadsheets.values.get({
     spreadsheetId: process.env.SPREADSHEET_ID, range: 'Sheet1'
   });
   return r.data.values || [];
@@ -53,18 +53,27 @@ async function ambilDataDashboard(auth) {
       if (d.getMonth()===bIni  && d.getFullYear()===yIni)  cIni++;
       if (d.getMonth()===bLalu && d.getFullYear()===yLalu) cLalu++;
     }
-    semua.push({ rowIndex:i+1, no:r[1]||'', tglSurat:fmt(r[2]), tglTerima:fmt(r[3]),
-      asal:r[4]||'', perihal:r[5]||'', link:r[6]||'', status:r[7]||'Belum Diproses' });
+    semua.push({
+      rowIndex: i+1, no: r[1]||'',
+      tglSurat: fmt(r[2]), tglTerima: fmt(r[3]),
+      asal: r[4]||'', perihal: r[5]||'',
+      link: r[6]||'', status: r[7]||'Belum Diproses'
+    });
   }
   const hasil = [...semua].reverse();
   const instansiList = [...new Set(semua.map(d=>d.asal).filter(Boolean))].sort();
-  return { statistik:{ini:cIni,lalu:cLalu,total:semua.length}, terbaru:hasil.slice(0,20), semua:hasil, instansiList };
+  return {
+    statistik: { ini:cIni, lalu:cLalu, total:semua.length },
+    terbaru: hasil.slice(0,20),
+    semua: hasil,
+    instansiList
+  };
 }
 
 async function simpanSurat(auth, obj) {
   if (!obj.noSurat || !obj.asalSurat || !obj.perihal || !obj.fileUrl)
     return { ok:false, msg:'Data tidak lengkap.' };
-  await sheets(auth).spreadsheets.values.append({
+  await getSheets(auth).spreadsheets.values.append({
     spreadsheetId: process.env.SPREADSHEET_ID,
     range: 'Sheet1', valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
@@ -81,11 +90,11 @@ async function editSurat(auth, obj) {
   if (!obj.rowIndex || !obj.noSurat || !obj.asalSurat || !obj.perihal)
     return { ok:false, msg:'Data tidak lengkap.' };
   const row = parseInt(obj.rowIndex);
-  const ex = await sheets(auth).spreadsheets.values.get({
+  const ex = await getSheets(auth).spreadsheets.values.get({
     spreadsheetId: process.env.SPREADSHEET_ID, range: `Sheet1!G${row}`
   });
   const link = ex.data.values?.[0]?.[0] || '';
-  await sheets(auth).spreadsheets.values.update({
+  await getSheets(auth).spreadsheets.values.update({
     spreadsheetId: process.env.SPREADSHEET_ID,
     range: `Sheet1!B${row}:H${row}`, valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
@@ -102,25 +111,23 @@ async function editSurat(auth, obj) {
 async function hapusSurat(auth, rowIndex) {
   const row = parseInt(rowIndex);
   const s = getSheets(auth);
-  
-  // Cek total baris dulu
+
+  // Cek total baris
   const data = await s.spreadsheets.values.get({
-    spreadsheetId: process.env.SPREADSHEET_ID,
-    range: 'Sheet1'
+    spreadsheetId: process.env.SPREADSHEET_ID, range: 'Sheet1'
   });
   const totalRows = (data.data.values || []).length;
 
-  // Jika hanya 1 baris data tersisa (baris ke-2, index 1),
-  // kosongkan saja daripada hapus
+  // Jika hanya 1 baris data tersisa, kosongkan saja
   if (totalRows <= 2) {
     await s.spreadsheets.values.clear({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: `Sheet1!A${row}:H${row}`
     });
-    return { ok: true, msg: 'Data berhasil dihapus!' };
+    return { ok:true, msg:'Data berhasil dihapus!' };
   }
 
-  // Hapus baris seperti biasa
+  // Hapus baris
   const meta = await s.spreadsheets.get({
     spreadsheetId: process.env.SPREADSHEET_ID
   });
@@ -128,14 +135,14 @@ async function hapusSurat(auth, rowIndex) {
   await s.spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
     requestBody: { requests: [{ deleteDimension: {
-      range: { sheetId, dimension: 'ROWS', startIndex: row-1, endIndex: row }
+      range: { sheetId, dimension:'ROWS', startIndex:row-1, endIndex:row }
     }}]}
   });
-  return { ok: true, msg: 'Data berhasil dihapus!' };
+  return { ok:true, msg:'Data berhasil dihapus!' };
 }
 
 async function updateStatus(auth, rowIndex, status) {
-  await sheets(auth).spreadsheets.values.update({
+  await getSheets(auth).spreadsheets.values.update({
     spreadsheetId: process.env.SPREADSHEET_ID,
     range: `Sheet1!H${parseInt(rowIndex)}`, valueInputOption: 'RAW',
     requestBody: { values: [[status]] }
@@ -155,7 +162,6 @@ async function eksporData(auth) {
   return { ok:true, csv };
 }
 
-// ── PARSE BODY HELPER ──
 async function parseBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   return new Promise((resolve, reject) => {
@@ -163,13 +169,12 @@ async function parseBody(req) {
     req.on('data', chunk => { data += chunk.toString(); });
     req.on('end', () => {
       try { resolve(data ? JSON.parse(data) : {}); }
-      catch(e) { reject(new Error('Invalid JSON: ' + data.slice(0,100))); }
+      catch(e) { reject(new Error('Invalid JSON')); }
     });
     req.on('error', reject);
   });
 }
 
-// ── MAIN HANDLER ──
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
