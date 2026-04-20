@@ -161,7 +161,7 @@ async function updateStatus(auth, rowIndex, status) {
 async function eksporData(auth) {
   const rows = await getRows(auth);
   let csv = ['Timestamp','No Surat','Tgl Surat','Tgl Terima','Asal Instansi','Perihal','Link PDF','Status'].join(';') + '\n';
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i]; if (!r||!r[1]) continue;
     const mapped = r.map((c,idx) => '"' + ((idx===2||idx===3)?fmt(c):String(c||'')).replace(/"/g,'""') + '"');
     while (mapped.length < 8) mapped.push('""');
