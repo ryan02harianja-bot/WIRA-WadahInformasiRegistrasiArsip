@@ -1,5 +1,5 @@
 // ============================================================
-// WIRA - api/wira.js
+// WIRA - api/wira.js - FINAL FIX
 // ============================================================
 const { google } = require('googleapis');
 
@@ -32,10 +32,11 @@ function fid(url) {
 
 async function getRows(auth) {
   const r = await getSheets(auth).spreadsheets.values.get({
-    spreadsheetId: process.env.SPREADSHEET_ID, range: 'Sheet1'
+    spreadsheetId: process.env.SPREADSHEET_ID,
+    range: 'Sheet1'
   });
   const vals = r.data.values || [];
-  console.log('Total rows:', vals.length, 'Baris 0:', JSON.stringify(vals[0]));
+  console.log('getRows: total=', vals.length, 'row0=', JSON.stringify(vals[0] || []));
   return vals;
 }
 
@@ -47,27 +48,40 @@ async function ambilDataDashboard(auth) {
   const bLalu = prev.getMonth(), yLalu = prev.getFullYear();
   let cIni = 0, cLalu = 0;
   const semua = [];
+
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    if (!r) continue;
+    if (!r || r.length === 0) continue;
+    const rowStr = r.join('').trim();
+    if (!rowStr) continue;
+
+    const rowIndex = i + 1;
     const d = r[2] ? new Date(r[2]) : null;
     if (d && !isNaN(d)) {
       if (d.getMonth()===bIni  && d.getFullYear()===yIni)  cIni++;
       if (d.getMonth()===bLalu && d.getFullYear()===yLalu) cLalu++;
     }
+
     semua.push({
-  rowIndex: i+1, no: r[1]||'',
-      tglSurat: fmt(r[2]), tglTerima: fmt(r[3]),
-      asal: r[4]||'', perihal: r[5]||'',
-      link: r[6]||'', status: r[7]||'Belum Diproses'
+      rowIndex,
+      no:        r[1] || r[0] || '',
+      tglSurat:  fmt(r[2]),
+      tglTerima: fmt(r[3]),
+      asal:      r[4] || '',
+      perihal:   r[5] || '',
+      link:      r[6] || '',
+      status:    r[7] || 'Belum Diproses'
     });
   }
+
+  console.log('semua.length=', semua.length, 'sample=', JSON.stringify(semua[0]));
+
   const hasil = [...semua].reverse();
   const instansiList = [...new Set(semua.map(d=>d.asal).filter(Boolean))].sort();
   return {
     statistik: { ini:cIni, lalu:cLalu, total:semua.length },
-    terbaru: hasil.slice(0,20),
-    semua: hasil,
+    terbaru:   hasil.slice(0,20),
+    semua:     hasil,
     instansiList
   };
 }
@@ -111,15 +125,10 @@ async function editSurat(auth, obj) {
 }
 
 async function hapusSurat(auth, rowIndex) {
-  console.log('hapusSurat dipanggil, rowIndex:', rowIndex, 'type:', typeof rowIndex);
-  
+  console.log('hapusSurat: rowIndex=', rowIndex, typeof rowIndex);
   const row = parseInt(rowIndex);
-  console.log('row setelah parseInt:', row);
-  
-  if (isNaN(row) || row < 1) {
-    console.log('Row tidak valid, rowIndex asli:', rowIndex);
+  if (isNaN(row) || row < 1)
     return { ok:false, msg:'Row tidak valid: ' + rowIndex };
-  }
 
   const s = getSheets(auth);
   const meta = await s.spreadsheets.get({
@@ -128,9 +137,9 @@ async function hapusSurat(auth, rowIndex) {
   const sheetId   = meta.data.sheets[0].properties.sheetId;
   const totalRows = meta.data.sheets[0].properties.gridProperties.rowCount;
 
-  console.log('totalRows:', totalRows, 'row:', row);
+  console.log('hapusSurat: sheetId=', sheetId, 'totalRows=', totalRows, 'row=', row);
 
-  if (totalRows <= 1 || row >= totalRows) {
+  if (row >= totalRows) {
     await s.spreadsheets.values.clear({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: `Sheet1!A${row}:Z${row}`
@@ -141,16 +150,12 @@ async function hapusSurat(auth, rowIndex) {
   await s.spreadsheets.batchUpdate({
     spreadsheetId: process.env.SPREADSHEET_ID,
     requestBody: { requests: [{ deleteDimension: {
-      range: {
-        sheetId,
-        dimension: 'ROWS',
-        startIndex: row - 1,
-        endIndex: row
-      }
+      range: { sheetId, dimension:'ROWS', startIndex:row-1, endIndex:row }
     }}]}
   });
   return { ok:true, msg:'Data berhasil dihapus!' };
 }
+
 async function updateStatus(auth, rowIndex, status) {
   await getSheets(auth).spreadsheets.values.update({
     spreadsheetId: process.env.SPREADSHEET_ID,
@@ -164,7 +169,7 @@ async function eksporData(auth) {
   const rows = await getRows(auth);
   let csv = ['Timestamp','No Surat','Tgl Surat','Tgl Terima','Asal Instansi','Perihal','Link PDF','Status'].join(';') + '\n';
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i]; if (!r||!r[1]) continue;
+    const r = rows[i]; if (!r || r.join('').trim()==='') continue;
     const mapped = r.map((c,idx) => '"' + ((idx===2||idx===3)?fmt(c):String(c||'')).replace(/"/g,'""') + '"');
     while (mapped.length < 8) mapped.push('""');
     csv += mapped.slice(0,8).join(';') + '\n';
@@ -203,6 +208,8 @@ module.exports = async function handler(req, res) {
     if (req.method === 'POST') {
       const body = await parseBody(req);
       const { action } = body;
+      console.log('POST action:', action, 'rowIndex:', body.rowIndex);
+
       if (action === 'simpanSurat' || action === 'uploadSurat')
         return res.json(await simpanSurat(auth, body));
       if (action === 'editSurat')
