@@ -765,7 +765,7 @@ function _renderHasil(data) {
             <option value="Sedang Diproses" ${d.status==='Sedang Diproses' ? 'selected':''}>Sedang Diproses</option>
             <option value="Selesai"         ${d.status==='Selesai'         ? 'selected':''}>Selesai</option>
           </select>
-          <button class="btn-action btn-del"onclick="mintaHapus(${Number(d.rowIndex)})">Hapus</button>
+          <button class="btn-action btn-del" onclick="mintaHapus(${d.rowIndex})">Hapus</button>
         </div>
       </div>
     </div>`;
@@ -1064,6 +1064,7 @@ function simpan() {
 // HAPUS
 // ============================================================
 function mintaHapus(rowIndex) {
+  console.log('mintaHapus dipanggil:', rowIndex, typeof rowIndex);
   hapusRowPending = rowIndex;
   console.log('mintaHapus:', rowIndex);
   hapusRowPending = rowIndex;
@@ -1078,7 +1079,7 @@ function tutupKonfirmasi() {
 function konfirmasiHapus() {
   if (!hapusRowPending && hapusRowPending !== 0) return;
   tutupKonfirmasi();
-  apiPost({ action: 'hapusSurat', rowIndex: String(hapusRowPending) })
+  apiPost({ action: 'hapusSurat', rowIndex: Number(hapusRowPending) })
     .then(res => {
       if (res.ok) {
         showToast(res.msg, 'success');
